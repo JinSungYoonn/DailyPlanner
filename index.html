@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Planner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+            height: 100vh;
+            position: relative;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 36px;
+            font-weight: bold;
+            position: absolute;
+            top: 20px;
+            width: 100%;
+        }
+
+        #planner-container {
+            display: flex;
+            width: 100%;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 20px;
+            position: absolute;
+            top: 50px; /* 원을 아래로 조금 내림 */
+        }
+
+        canvas {
+            width: 500px;
+            height: 500px;
+        }
+
+        #info {
+            width: 40%;
+            padding: 20px;
+            border: 1px solid #ccc;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            position: absolute;
+            top: 100px;
+            left: 600px;
+        }
+
+        #info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        #info table th, #info table td {
+            border: 1px solid #ccc;
+            padding: 12px;
+            text-align: left;
+        }
+
+        #info table th {
+            background-color: #e0e0e0;
+        }
+
+        .remove-button {
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 5px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .remove-button:hover {
+            background-color: #ff1a1a;
+        }
+
+        .task-input {
+            width: 100%;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>Daily Planner</h1>
+    <div id="planner-container">
+        <canvas id="circle"></canvas>
+        <div id="info">
+            <h2>Schedule</h2>
+            <table id="info-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Task</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="info-fields">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const colors = {
+            'Red': 'rgba(255, 0, 0, 0.5)',
+            'Orange': 'rgba(255, 165, 0, 0.5)',
+            'Green': 'rgba(0, 255, 0, 0.5)',
+            'Blue': 'rgba(0, 0, 255, 0.5)',
+            'Indigo': 'rgba(75, 0, 130, 0.5)',
+            'Violet': 'rgba(238, 130, 238, 0.5)',
+            'White': 'rgba(255, 255, 255, 0.5)'
+        };
+
+        let highlightedSections = {};
+        let isDragging = false;
+        let dragStartHour = null;
+
+        function resizeCanvas() {
+            const canvas = document.getElementById('circle');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 500;
+            canvas.height = 500;
+            drawClock(canvas, ctx);
+        }
+
+        // 원에 시각 표시 및 선 그리기
+        function drawClock(canvas, ctx) {
+            const radius = Math.min(canvas.width, canvas.height) / 2 - 50; // 크기를 조정
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 캔버스의 중심점을 기준으로 이동
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+
+            // 원 그리기
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // 0부터 23까지의 숫자를 원 바깥에 표시하고, 모든 시간에 대한 선을 그리기
+            for (let i = 0; i < 24; i++) {
+                const angle = (i * Math.PI) / 12 - Math.PI / 2;
+                const hour = (i === 0) ? 24 : i;
+
+                const xInner = Math.cos(angle) * radius;
+                const yInner = Math.sin(angle) * radius;
+
+                // 모든 시간에 대해 선을 그림
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(xInner, yInner);
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+                ctx.stroke();
+
+                // 숫자 표시
+                const xText = Math.cos(angle) * (radius + 20);
+                const yText = Math.sin(angle) * (radius + 20);
+
+                ctx.font = "24px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillStyle = "black";
+                ctx.fillText(hour, xText, yText);
+
+                // 선택된 색상으로 시간 칸을 채우기
+                if (highlightedSections[hour]) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, radius, angle, angle + Math.PI / 12);
+                    ctx.lineTo(0, 0);
+                    ctx.closePath();
+                    ctx.fillStyle = highlightedSections[hour];
+                    ctx.fill();
+                }
+            }
+
+            // 캔버스를 원래 위치로 복원
+            ctx.translate(-canvas.width / 2, -canvas.height / 2);
+        }
+
+        // 각 시간에 대한 클릭 및 드래그 이벤트 처리
+        function addClickListener(canvas) {
+            canvas.addEventListener('mousedown', (event) => {
+                isDragging = true;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left - canvas.width / 2;
+                const y = event.clientY - rect.top - canvas.height / 2;
+                dragStartHour = calculateHourFromPosition(x, y);
+            });
+
+            canvas.addEventListener('mousemove', (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left - canvas.width / 2;
+                const y = event.clientY - rect.top - canvas.height / 2;
+                const radius = Math.min(canvas.width, canvas.height) / 2 - 50;
+
+                // 마우스 포인터가 원 내부에 있을 때만 작동
+                if (Math.sqrt(x * x + y * y) <= radius) {
+                    const currentHour = calculateHourFromPosition(x, y);
+                    resizeCanvas();
+
+                    if (isDragging) {
+                        let startHour = dragStartHour;
+                        let endHour = currentHour;
+
+                        // 반시계 방향 드래그를 고려하여 조정
+                        if (endHour < startHour && dragStartHour !== 24 && currentHour !== 1) {
+                            [startHour, endHour] = [endHour, startHour];
+                        }
+
+                        for (let h = startHour; h !== endHour + 1; h++) {
+                            if (h > 24) h = 1;  // 24에서 1로 순환
+                            highlightSection(canvas, h, 'rgba(255, 255, 0, 0.3)');
+                            if (h === endHour) break;  // 끝에 도달하면 종료
+                        }
+                    } else {
+                        highlightSection(canvas, currentHour, 'rgba(255, 255, 0, 0.3)');
+                    }
+                }
+            });
+
+            canvas.addEventListener('mouseup', (event) => {
+                if (!isDragging) return;
+                isDragging = false;
+
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left - canvas.width / 2;
+                const y = event.clientY - rect.top - canvas.height / 2;
+                const hour = calculateHourFromPosition(x, y);
+
+                let startHour = dragStartHour;
+                let endHour = hour;
+
+                // 반시계 방향 드래그를 고려하여 조정
+                if (endHour < startHour && dragStartHour !== 24 && hour !== 1) {
+                    [startHour, endHour] = [endHour, startHour];
+                }
+
+                const selectedColorKey = prompt("Choose a color: Red, Orange, Green, Blue, Indigo, Violet, White");
+                const selectedColor = colors[selectedColorKey];
+
+                // 잘못된 색상이 입력되었을 경우 null을 출력하고 종료
+                if (!selectedColor) {
+                    alert("Invalid color selection. Operation canceled.");
+                    return;
+                }
+
+                // 선택된 시간을 한 칸 앞당겨서 색칠
+                for (let h = startHour - 1; h !== endHour; h++) {
+                    if (h < 1) h = 24;  // 1 이하일 때 24로 순환
+                    highlightedSections[h] = selectedColor;
+                    if (h === endHour - 1) break;  // 끝에 도달하면 종료
+                }
+
+                resizeCanvas();  // 선택된 색상으로 재도
+
+                addInfoField(startHour, endHour);
+            });
+
+            // 마우스가 캔버스를 벗어날 경우 드래그 중지
+            canvas.addEventListener('mouseleave', () => {
+                isDragging = false;
+            });
+        }
+
+        // 클릭 위치로부터 시간을 계산하는 함수
+        function calculateHourFromPosition(x, y) {
+            const angle = Math.atan2(y, x) + Math.PI / 2;
+            let hour = Math.floor(angle / (Math.PI / 12)) + 1;  // 각도 계산을 조정하여 정확한 시간 반환
+            if (hour < 1) hour += 24;
+            if (hour > 24) hour -= 24;
+            return hour;
+        }
+
+        // 선택된 시간 강조 표시
+        function highlightSection(canvas, hour, color) {
+            const ctx = canvas.getContext('2d');
+            const radius = Math.min(canvas.width, canvas.height) / 2 - 50; // 크기를 조정
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+
+            const angleStart = (hour - 1) * Math.PI / 12 - Math.PI / 2;
+            const angleEnd = hour * Math.PI / 12 - Math.PI / 2;
+
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, angleStart, angleEnd);
+            ctx.lineTo(0, 0);
+            ctx.closePath();
+            ctx.fillStyle = color;  // 선택된 색상으로 강조
+            ctx.fill();
+
+            // 캔버스를 원래 위치로 복원
+            ctx.translate(-canvas.width / 2, -canvas.height / 2);
+        }
+
+        // 정보 입력 필드를 오른쪽에 추가하는 함수
+        function addInfoField(startHour, endHour) {
+            const infoFields = document.getElementById('info-fields');
+
+            const existingRow = document.getElementById(`info-${startHour}-${endHour}`);
+            if (existingRow) {
+                return;
+            }
+
+            const row = document.createElement('tr');
+            row.id = `info-${startHour}-${endHour}`;
+
+            const adjustedStartHour = startHour === 24 ? 0 : startHour; // 수정: 시작 시간을 조정하지 않음
+            const formattedStartHour = adjustedStartHour % 24; // 숫자만 표기
+            const formattedEndHour = (endHour > 24 ? endHour - 24 : endHour) % 24; // 숫자만 표기
+
+            const hourCell = document.createElement('td');
+            hourCell.innerText = `${formattedStartHour}:00 - ${formattedEndHour}:00`;
+
+            const inputCell = document.createElement('td');
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'task-input';  // Task 입력 가능하게 설정
+
+            const removeCell = document.createElement('td');
+            const removeButton = document.createElement('button');
+            removeButton.innerText = 'Remove';
+            removeButton.className = 'remove-button';
+            removeButton.onclick = () => removeSchedule(startHour, endHour);
+
+            inputCell.appendChild(input);
+            removeCell.appendChild(removeButton);
+            row.appendChild(hourCell);
+            row.appendChild(inputCell);
+            row.appendChild(removeCell);
+            infoFields.appendChild(row);
+
+            // 시간 순서에 맞게 재배치
+            const rows = Array.from(infoFields.getElementsByTagName('tr'));
+            rows.sort((a, b) => {
+                const [startA, endA] = a.id.split('-').slice(1).map(Number);
+                const [startB, endB] = b.id.split('-').slice(1).map(Number);
+                return startA - startB || endA - endB;
+            });
+            rows.forEach(row => infoFields.appendChild(row));
+        }
+
+        // 스케줄에서 시간을 제거하고 원의 색상을 되돌리는 함수
+        function removeSchedule(startHour, endHour) {
+            // 스케줄에서 해당 시간 제거
+            const row = document.getElementById(`info-${startHour}-${endHour}`);
+            if (row) {
+                row.remove();
+            }
+
+            // 원의 색상을 흰색으로 되돌림
+            for (let h = startHour - 1; h !== endHour; h++) {
+                if (h < 1) h = 24;  // 1 이하일 때 24로 순환
+                delete highlightedSections[h];
+                if (h === endHour - 1) break;  // 끝에 도달하면 종료
+            }
+
+            resizeCanvas(); // 다시 그리기
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            addClickListener(document.getElementById('circle'));
+        });
+    </script>
+</body>
+</html>
+
