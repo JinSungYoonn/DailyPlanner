@@ -211,14 +211,13 @@
                         let endHour = currentHour;
 
                         // 반시계 방향 드래그를 고려하여 조정
-                        if (endHour < startHour && dragStartHour !== 24 && currentHour !== 1) {
-                            [startHour, endHour] = [endHour, startHour];
+                        if (endHour < startHour) {
+                            endHour += 24; // 자정을 넘는 경우
                         }
 
-                        for (let h = startHour; h !== endHour + 1; h++) {
-                            if (h > 24) h = 1;  // 24에서 1로 순환
-                            highlightSection(canvas, h, 'rgba(255, 255, 0, 0.3)');
-                            if (h === endHour) break;  // 끝에 도달하면 종료
+                        for (let h = startHour; h <= endHour; h++) {
+                            const adjustedHour = h > 24 ? h - 24 : h; // 자정을 넘는 경우 시간 조정
+                            highlightSection(canvas, adjustedHour, 'rgba(255, 255, 0, 0.3)');
                         }
                     } else {
                         highlightSection(canvas, currentHour, 'rgba(255, 255, 0, 0.3)');
@@ -239,8 +238,8 @@
                 let endHour = hour;
 
                 // 반시계 방향 드래그를 고려하여 조정
-                if (endHour < startHour && dragStartHour !== 24 && hour !== 1) {
-                    [startHour, endHour] = [endHour, startHour];
+                if (endHour < startHour) {
+                    endHour += 24; // 자정을 넘는 경우
                 }
 
                 const selectedColorKey = prompt("Choose a color: Red, Orange, Green, Blue, Indigo, Violet, White");
@@ -253,10 +252,9 @@
                 }
 
                 // 선택된 시간을 한 칸 앞당겨서 색칠
-                for (let h = startHour - 1; h !== endHour; h++) {
-                    if (h < 1) h = 24;  // 1 이하일 때 24로 순환
-                    highlightedSections[h] = selectedColor;
-                    if (h === endHour - 1) break;  // 끝에 도달하면 종료
+                for (let h = startHour - 1; h < endHour; h++) {
+                    const adjustedHour = h < 1 ? 24 : h > 24 ? h - 24 : h; // 시간 조정
+                    highlightedSections[adjustedHour] = selectedColor;
                 }
 
                 resizeCanvas();  // 선택된 색상으로 재도
@@ -312,8 +310,8 @@
             row.id = `info-${startHour}-${endHour}`;
 
             const adjustedStartHour = startHour === 24 ? 0 : startHour; // 수정: 시작 시간을 조정하지 않음
-            const formattedStartHour = adjustedStartHour % 24; // 숫자만 표기
-            const formattedEndHour = (endHour > 24 ? endHour - 24 : endHour) % 24; // 숫자만 표기
+            const formattedStartHour = adjustedStartHour === 1 ? 24 : (adjustedStartHour - 1) % 24; // 시작 시간을 1시간 앞당김
+            const formattedEndHour = endHour % 24;
 
             const hourCell = document.createElement('td');
             hourCell.innerText = `${formattedStartHour}:00 - ${formattedEndHour}:00`;
@@ -355,10 +353,9 @@
             }
 
             // 원의 색상을 흰색으로 되돌림
-            for (let h = startHour - 1; h !== endHour; h++) {
-                if (h < 1) h = 24;  // 1 이하일 때 24로 순환
-                delete highlightedSections[h];
-                if (h === endHour - 1) break;  // 끝에 도달하면 종료
+            for (let h = startHour - 1; h < endHour; h++) {
+                const adjustedHour = h < 1 ? 24 : h > 24 ? h - 24 : h; // 시간 조정
+                delete highlightedSections[adjustedHour];
             }
 
             resizeCanvas(); // 다시 그리기
